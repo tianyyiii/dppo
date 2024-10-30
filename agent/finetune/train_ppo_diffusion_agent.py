@@ -19,7 +19,6 @@ from util.scheduler import CosineAnnealingWarmupRestarts
 
 
 class TrainPPODiffusionAgent(TrainPPOAgent):
-
     def __init__(self, cfg):
         super().__init__(cfg)
 
@@ -46,7 +45,6 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
             )
 
     def run(self):
-
         # Start training loop
         timer = Timer()
         run_results = []
@@ -54,7 +52,6 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
         last_itr_eval = False
         done_venv = np.zeros((1, self.n_envs))
         while self.itr < self.n_train_itr:
-
             # Prepare video paths for each envs --- only applies for the first set of episodes if allowing reset within iteration and each iteration has multiple episodes from one env
             options_venv = [{} for _ in range(self.n_envs)]
             if self.itr % self.render_freq == 0 and self.render_video:
@@ -126,9 +123,13 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                 action_venv = output_venv[:, : self.act_steps]
 
                 # Apply multi-step action
-                obs_venv, reward_venv, terminated_venv, truncated_venv, info_venv = (
-                    self.venv.step(action_venv)
-                )
+                (
+                    obs_venv,
+                    reward_venv,
+                    terminated_venv,
+                    truncated_venv,
+                    info_venv,
+                ) = self.venv.step(action_venv)
                 done_venv = terminated_venv | truncated_venv
                 if self.save_full_observations:  # state-only
                     obs_full_venv = np.array(
@@ -285,40 +286,45 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                     )
                 }
                 chains_k = einops.rearrange(
-                    torch.tensor(chains_trajs).float().to(self.device),
+                    torch.tensor(chains_trajs, device=self.device).float(),
                     "s e t h d -> (s e) t h d",
                 )
                 returns_k = (
-                    torch.tensor(returns_trajs).float().to(self.device).reshape(-1)
+                    torch.tensor(returns_trajs, device=self.device).float().reshape(-1)
                 )
                 values_k = (
-                    torch.tensor(values_trajs).float().to(self.device).reshape(-1)
+                    torch.tensor(values_trajs, device=self.device).float().reshape(-1)
                 )
                 advantages_k = (
-                    torch.tensor(advantages_trajs).float().to(self.device).reshape(-1)
+                    torch.tensor(advantages_trajs, device=self.device)
+                    .float()
+                    .reshape(-1)
                 )
-                logprobs_k = torch.tensor(logprobs_trajs).float().to(self.device)
+                logprobs_k = torch.tensor(logprobs_trajs, device=self.device).float()
 
                 # Update policy and critic
-                total_steps = self.n_steps * self.n_envs
-                inds_k = np.arange(total_steps)
+                total_steps = self.n_steps * self.n_envs * self.model.ft_denoising_steps
                 clipfracs = []
                 for update_epoch in range(self.update_epochs):
-
                     # for each epoch, go through all data in batches
                     flag_break = False
-                    np.random.shuffle(inds_k)
+                    inds_k = torch.randperm(total_steps, device=self.device)
                     num_batch = max(1, total_steps // self.batch_size)  # skip last ones
                     for batch in range(num_batch):
                         start = batch * self.batch_size
                         end = start + self.batch_size
                         inds_b = inds_k[start:end]  # b for batch
-                        obs_b = {"state": obs_k["state"][inds_b]}
-                        chains_b = chains_k[inds_b]
-                        returns_b = returns_k[inds_b]
-                        values_b = values_k[inds_b]
-                        advantages_b = advantages_k[inds_b]
-                        logprobs_b = logprobs_k[inds_b]
+                        batch_inds_b, denoising_inds_b = torch.unravel_index(
+                            inds_b,
+                            (self.n_steps * self.n_envs, self.model.ft_denoising_steps),
+                        )
+                        obs_b = {"state": obs_k["state"][batch_inds_b]}
+                        chains_prev_b = chains_k[batch_inds_b, denoising_inds_b]
+                        chains_next_b = chains_k[batch_inds_b, denoising_inds_b + 1]
+                        returns_b = returns_k[batch_inds_b]
+                        values_b = values_k[batch_inds_b]
+                        advantages_b = advantages_k[batch_inds_b]
+                        logprobs_b = logprobs_k[batch_inds_b, denoising_inds_b]
 
                         # get loss
                         (
@@ -332,7 +338,9 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                             eta,
                         ) = self.model.loss(
                             obs_b,
-                            chains_b,
+                            chains_prev_b,
+                            chains_next_b,
+                            denoising_inds_b,
                             returns_b,
                             values_b,
                             advantages_b,

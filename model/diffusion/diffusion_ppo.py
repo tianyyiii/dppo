@@ -22,7 +22,6 @@ from model.diffusion.diffusion_vpg import VPGDiffusion
 
 
 class PPODiffusion(VPGDiffusion):
-
     def __init__(
         self,
         gamma_denoising: float,
@@ -58,7 +57,9 @@ class PPODiffusion(VPGDiffusion):
     def loss(
         self,
         obs,
-        chains,
+        chains_prev,
+        chains_next,
+        denoising_inds,
         returns,
         oldvalues,
         advantages,
@@ -81,9 +82,11 @@ class PPODiffusion(VPGDiffusion):
         reward_horizon: action horizon that backpropagates gradient
         """
         # Get new logprobs for denoising steps from T-1 to 0 - entropy is fixed fod diffusion
-        newlogprobs, eta = self.get_logprobs(
+        newlogprobs, eta = self.get_logprobs_subsample(
             obs,
-            chains,
+            chains_prev,
+            chains_next,
+            denoising_inds,
             get_ent=True,
         )
         entropy_loss = -eta.mean()
@@ -92,7 +95,7 @@ class PPODiffusion(VPGDiffusion):
 
         # only backpropagate through the earlier steps (e.g., ones actually executed in the environment)
         newlogprobs = newlogprobs[:, :reward_horizon, :]
-        oldlogprobs = oldlogprobs[:, :, :reward_horizon, :]
+        oldlogprobs = oldlogprobs[:, :reward_horizon, :]
 
         # Get the logprobs - batch over B and denoising steps
         newlogprobs = newlogprobs.mean(dim=(-1, -2)).view(-1)
@@ -106,9 +109,7 @@ class PPODiffusion(VPGDiffusion):
 
             # Get counterfactual teacher actions
             samples = self.forward(
-                cond=obs.float()
-                .unsqueeze(1)
-                .to(self.device),  # B x horizon=1 x obs_dim
+                cond=obs,
                 deterministic=False,
                 return_chain=True,
                 use_base_policy=True,
@@ -116,7 +117,7 @@ class PPODiffusion(VPGDiffusion):
             # Get logprobs of teacher actions under this policy
             bc_logprobs = self.get_logprobs(
                 obs,
-                samples.chains,  # n_env x denoising x horizon x act
+                samples.chains,
                 get_ent=False,
                 use_base_policy=False,
             )
@@ -133,14 +134,13 @@ class PPODiffusion(VPGDiffusion):
         advantage_max = torch.quantile(advantages, self.clip_advantage_upper_quantile)
         advantages = advantages.clamp(min=advantage_min, max=advantage_max)
 
-        # repeat advantages for denoising steps and horizon steps
-        advantages = advantages.repeat_interleave(self.ft_denoising_steps)
-
         # denoising discount
         discount = torch.tensor(
-            [self.gamma_denoising**i for i in reversed(range(self.ft_denoising_steps))]
+            [
+                self.gamma_denoising ** (self.ft_denoising_steps - i - 1)
+                for i in denoising_inds
+            ]
         ).to(self.device)
-        discount = discount.repeat(len(advantages) // self.ft_denoising_steps)
         advantages *= discount
 
         # get ratio
@@ -148,9 +148,7 @@ class PPODiffusion(VPGDiffusion):
         ratio = logratio.exp()
 
         # exponentially interpolate between the base and the current clipping value over denoising steps and repeat
-        t = torch.arange(self.ft_denoising_steps).float().to(self.device) / (
-            self.ft_denoising_steps - 1
-        )  # 0 to 1
+        t = (denoising_inds.float() / (self.ft_denoising_steps - 1)).to(self.device)
         if self.ft_denoising_steps > 1:
             clip_ploss_coef = self.clip_ploss_coef_base + (
                 self.clip_ploss_coef - self.clip_ploss_coef_base
@@ -158,10 +156,7 @@ class PPODiffusion(VPGDiffusion):
                 math.exp(self.clip_ploss_coef_rate) - 1
             )
         else:
-            clip_ploss_coef = torch.tensor([self.clip_ploss_coef]).to(self.device)
-        clip_ploss_coef = clip_ploss_coef.repeat(
-            len(advantages) // self.ft_denoising_steps
-        )
+            clip_ploss_coef = t
 
         # get kl difference and whether value clipped
         with torch.no_grad():

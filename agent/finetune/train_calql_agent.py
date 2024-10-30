@@ -82,8 +82,6 @@ class TrainCalQLAgent(TrainAgent):
         if self.train_online:
             # number of episode to colect per epoch for training
             self.n_episode_per_epoch = cfg.train.n_episode_per_epoch
-            # UTD ratio
-            self.online_utd_ratio = cfg.train.online_utd_ratio
 
         # Eval episodes
         self.n_eval_episode = cfg.train.n_eval_episode
@@ -204,9 +202,13 @@ class TrainCalQLAgent(TrainAgent):
                     action_venv = samples[:, : self.act_steps]
 
                 # Apply multi-step action
-                obs_venv, reward_venv, terminated_venv, truncated_venv, info_venv = (
-                    self.venv.step(action_venv)
-                )
+                (
+                    obs_venv,
+                    reward_venv,
+                    terminated_venv,
+                    truncated_venv,
+                    info_venv,
+                ) = self.venv.step(action_venv)
                 done_venv = terminated_venv | truncated_venv
                 reward_trajs[step] = reward_venv
                 firsts_trajs[step + 1] = done_venv
@@ -308,7 +310,8 @@ class TrainCalQLAgent(TrainAgent):
 
                 # override num_update
                 if self.train_online:
-                    num_update = len(reward_trajs)  # assume one env!
+                    # the amount of new transitions(single env)
+                    num_update = len(reward_trajs_split[0])
                 else:
                     num_update = self.num_update
                 for _ in range(num_update):
@@ -413,7 +416,6 @@ class TrainCalQLAgent(TrainAgent):
                         reward_to_go_b,
                         terminated_b,
                         self.gamma,
-                        alpha,
                     )
                     self.critic_optimizer.zero_grad()
                     loss_critic.backward()
