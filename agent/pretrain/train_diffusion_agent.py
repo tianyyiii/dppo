@@ -38,8 +38,7 @@ class TrainDiffusionAgent(PreTrainAgent):
                 self.optimizer.zero_grad()
 
                 # update ema
-                if self.epoch % self.update_ema_freq == 0:
-                    self.step_ema()
+                self.step_ema()
             loss_train = np.mean(loss_train_epoch)
 
             # validate
