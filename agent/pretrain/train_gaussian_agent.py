@@ -24,6 +24,7 @@ class TrainGaussianAgent(PreTrainAgent):
 
         timer = Timer()
         self.epoch = 1
+        cnt_batch = 0
         for _ in range(self.n_epochs):
 
             # train
@@ -46,7 +47,9 @@ class TrainGaussianAgent(PreTrainAgent):
                 self.optimizer.zero_grad()
 
                 # update ema
-                self.step_ema()
+                if cnt_batch % self.update_ema_freq == 0:
+                    self.step_ema()
+                cnt_batch += 1
             loss_train = np.mean(loss_train_epoch)
             ent_train = np.mean(ent_train_epoch)
 
