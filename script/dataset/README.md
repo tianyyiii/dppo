@@ -16,3 +16,9 @@ python download_datasets.py --tasks all --dataset_types mh --hdf5_types raw # pi
 # for pixel, replay the trajectories to extract image observations
 python robomimic/scripts/dataset_states_to_obs.py --done_mode 2 --dataset datasets/can/mh/demo_v141.hdf5 --output_name image_v141.hdf5 --camera_names robot0_eye_in_hand --camera_height 96 --camera_width 96 --exclude-next-obs --n 100
 ```
+
+D3IL data: first download the raw data from [D3IL](https://github.com/ALRhub/d3il), see the Google Drive link
+```console
+python script/dataset/process_d3il_dataset.py --load_path=<avoid_data_path> --env_type=avoid   # save all data
+python script/dataset/filter_d3il_avoid_data.py --load_path=<avoid_data_path> --desired_modes ... --required_modes ...  # filter modes
+```
