@@ -10,7 +10,7 @@ Download the IsaacGym installer from the [IsaacGym website](https://developer.nv
 You can also download a copy of the file from their AWS S3 bucket for your convenience:
 ```console
 cd ~
-wget https://iai-robust-rearrangement.s3.us-east-2.amazonaws.com/IsaacGym_Preview_4_Package.tar.gz
+wget https://iai-robust-rearrangement.s3.us-east-2.amazonaws.com/packages/IsaacGym_Preview_4_Package.tar.gz
 ```
 
 Once the zipped file is downloaded, move it to the desired location and unzip it by running:
