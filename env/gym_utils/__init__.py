@@ -126,8 +126,8 @@ def make_async(
         import robomimic.utils.obs_utils as ObsUtils
     elif "avoiding" in id:
         import gym_avoiding
-    else:
-        import d4rl.gym_mujoco
+    # else:
+    #     import d4rl.gym_mujoco
     from gym.envs import make as make_
 
     def _make_env():
@@ -167,7 +167,9 @@ def make_async(
         else:  # d3il, gym
             if "kitchen" not in id:  # d4rl kitchen does not support rendering!
                 kwargs["render"] = render
-            env = make_(id, **kwargs)
+            # env = make_(id, **kwargs)
+            print("env_id", id)
+            env = make_(id)
 
         # add wrappers
         if wrappers is not None:

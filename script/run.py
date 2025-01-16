@@ -52,16 +52,16 @@ def main(cfg: OmegaConf):
         gdown.download_folder(url=download_url, output=download_target)
 
     # For for-tuning: download normalization if needed
-    if "normalization_path" in cfg and not os.path.exists(cfg.normalization_path):
-        download_url = get_normalization_download_url(cfg)
-        download_target = cfg.normalization_path
-        dir_name = os.path.dirname(download_target)
-        if not os.path.exists(dir_name):
-            os.makedirs(dir_name)
-        log.info(
-            f"Downloading normalization statistics from {download_url} to {download_target}"
-        )
-        gdown.download(url=download_url, output=download_target, fuzzy=True)
+    # if "normalization_path" in cfg and not os.path.exists(cfg.normalization_path):
+    #     download_url = get_normalization_download_url(cfg)
+    #     download_target = cfg.normalization_path
+    #     dir_name = os.path.dirname(download_target)
+    #     if not os.path.exists(dir_name):
+    #         os.makedirs(dir_name)
+    #     log.info(
+    #         f"Downloading normalization statistics from {download_url} to {download_target}"
+    #     )
+    #     gdown.download(url=download_url, output=download_target, fuzzy=True)
 
     # For for-tuning: download checkpoint if needed
     if "base_policy_path" in cfg and not os.path.exists(cfg.base_policy_path):

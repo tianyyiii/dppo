@@ -19,14 +19,19 @@ class MujocoLocomotionLowdimWrapper(gym.Env):
 
         # setup spaces
         self.action_space = env.action_space
-        normalization = np.load(normalization_path)
-        self.obs_min = normalization["obs_min"]
-        self.obs_max = normalization["obs_max"]
-        self.action_min = normalization["action_min"]
-        self.action_max = normalization["action_max"]
+        # normalization = np.load(normalization_path)
+        # self.obs_min = normalization["obs_min"]
+        # self.obs_max = normalization["obs_max"]
+        # self.action_min = normalization["action_min"]
+        # self.action_max = normalization["action_max"]
+        self.obs_min = -1
+        self.obs_max = 1
+        self.action_min = -1
+        self.action_max = 1
 
         self.observation_space = spaces.Dict()
         obs_example = self.env.reset()
+        obs_example = obs_example[0]
         low = np.full_like(obs_example, fill_value=-1)
         high = np.full_like(obs_example, fill_value=1)
         self.observation_space["state"] = spaces.Box(
@@ -49,9 +54,10 @@ class MujocoLocomotionLowdimWrapper(gym.Env):
         if new_seed is not None:
             self.seed(seed=new_seed)
         raw_obs = self.env.reset()
+        obs = raw_obs[0]
 
         # normalize
-        obs = self.normalize_obs(raw_obs)
+        # obs = self.normalize_obs(raw_obs)
         return {"state": obs}
 
     def normalize_obs(self, obs):
@@ -62,12 +68,15 @@ class MujocoLocomotionLowdimWrapper(gym.Env):
         return action * (self.action_max - self.action_min) + self.action_min
 
     def step(self, action):
-        raw_action = self.unnormalize_action(action)
-        raw_obs, reward, done, info = self.env.step(raw_action)
-
+        # raw_action = self.unnormalize_action(action)
+        raw_action = action
+        raw_obs, reward, terminated, truncated, info = self.env.step(raw_action)
+        done = terminated or truncated
         # normalize
-        obs = self.normalize_obs(raw_obs)
+        # obs = self.normalize_obs(raw_obs)
+        obs = raw_obs
         return {"state": obs}, reward, done, info
 
     def render(self, **kwargs):
         return self.env.render()
+
