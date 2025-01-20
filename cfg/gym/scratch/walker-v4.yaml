@@ -11,7 +11,7 @@ normalization_path: ${oc.env:DPPO_DATA_DIR}/gym/${env_name}/normalization.npz
 
 seed: 42
 device: cuda:0
-env_name: HalfCheetah-v4
+env_name: Walker2d-v4
 obs_dim: 17
 action_dim: 6
 denoising_steps: 10
@@ -42,7 +42,7 @@ wandb:
   run: ${now:%H-%M-%S}_${name}
 
 train:
-  n_train_itr: 301
+  n_train_itr: 41
   n_critic_warmup_itr: 0
   n_steps: 2000
   gamma: 0.99

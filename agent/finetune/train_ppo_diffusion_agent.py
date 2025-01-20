@@ -51,7 +51,18 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
         cnt_train_step = 0
         last_itr_eval = False
         done_venv = np.zeros((1, self.n_envs))
+        self.eval_n_steps = 4000
+        self.train_n_steps = self.n_steps
         while self.itr < self.n_train_itr:
+            # Define train or eval - all envs restart
+            eval_mode = self.itr % self.val_freq == 0 and not self.force_train
+            print("eval mode is", eval_mode)
+            if eval_mode:
+                self.n_steps = self.eval_n_steps
+            else:
+                self.n_steps = self.train_n_steps
+            print(self.n_steps, "n_steps")
+
             # Prepare video paths for each envs --- only applies for the first set of episodes if allowing reset within iteration and each iteration has multiple episodes from one env
             options_venv = [{} for _ in range(self.n_envs)]
             if self.itr % self.render_freq == 0 and self.render_video:
@@ -60,8 +71,6 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                         self.render_dir, f"itr-{self.itr}_trial-{env_ind}.mp4"
                     )
 
-            # Define train or eval - all envs restart
-            eval_mode = self.itr % self.val_freq == 0 and not self.force_train
             self.model.eval() if eval_mode else self.model.train()
             last_itr_eval = eval_mode
 
@@ -99,7 +108,7 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
 
             # Collect a set of trajectories from env
             for step in range(self.n_steps):
-                if step % 10 == 0:
+                if step % 100 == 0:
                     print(f"Processed step {step} of {self.n_steps}")
 
                 # Select action
@@ -130,6 +139,10 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                     truncated_venv,
                     info_venv,
                 ) = self.venv.step(action_venv)
+
+                # log.info(obs_venv["state"].shape)
+                # log.info("obs venv eval")
+
                 done_venv = terminated_venv | truncated_venv
                 if self.save_full_observations:  # state-only
                     obs_full_venv = np.array(
@@ -165,9 +178,12 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                     for env_ind, start, end in episodes_start_end
                 ]
                 num_episode_finished = len(reward_trajs_split)
+                print(num_episode_finished, "finished_episodes")
                 episode_reward = np.array(
                     [np.sum(reward_traj) for reward_traj in reward_trajs_split]
                 )
+                if eval_mode and num_episode_finished >= 20:
+                    episode_reward_2 = episode_reward[:20]
                 if (
                     self.furniture_sparse_reward
                 ):  # only for furniture tasks, where reward only occurs in one env step
@@ -180,6 +196,7 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                         ]
                     )
                 avg_episode_reward = np.mean(episode_reward)
+                avg_episode_reward_2 = np.mean(episode_reward_2)
                 avg_best_reward = np.mean(episode_best_reward)
                 success_rate = np.mean(
                     episode_best_reward >= self.best_reward_threshold_for_success
@@ -433,7 +450,7 @@ class TrainPPODiffusionAgent(TrainPPOAgent):
                 run_results[-1]["time"] = time
                 if eval_mode:
                     log.info(
-                        f"eval: success rate {success_rate:8.4f} | avg episode reward {avg_episode_reward:8.4f} | avg best reward {avg_best_reward:8.4f}"
+                        f"eval: success rate {success_rate:8.4f} | avg episode reward {avg_episode_reward:8.4f} | avg episode reward first 20 {avg_episode_reward_2:8.4f} | avg best reward {avg_best_reward:8.4f}"
                     )
                     if self.use_wandb:
                         wandb.log(
